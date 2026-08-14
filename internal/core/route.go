@@ -55,6 +55,12 @@ func route(appends []string) error {
 	if err != nil {
 		return err
 	}
+	// 物理网卡的 DNS 若被系统按国内 IP 段直连出去，会绕过 tun 里的 hijack-dns/proxyDns，被运营商污染
+	// 这里强制把物理网卡 DNS 改成非国内地址，确保查询走 tun 的默认路由被 sing-box 接管
+	err = utils.SetInterfaceDNS(defaultNetworkInfo.IfIndex, []string{"1.1.1.1", "8.8.8.8"})
+	if err != nil {
+		log.Println("set interface dns error", err)
+	}
 	for _, prefix := range routeIps(appends) {
 		if prefix.Addr().Is4() {
 			_, ipNet, _ := net.ParseCIDR(prefix.String())
@@ -78,6 +84,10 @@ func route(appends []string) error {
 	return err
 }
 func deleteRoute(appends []string) {
+	err := utils.ResetInterfaceDNS(defaultNetworkInfo.IfIndex)
+	if err != nil {
+		log.Println("reset interface dns error", err)
+	}
 	for _, prefix := range routeIps(appends) {
 		if prefix.Addr().Is4() {
 			_, ipNet, _ := net.ParseCIDR(prefix.String())

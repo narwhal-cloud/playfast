@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/r10v/gowindows"
@@ -62,6 +63,36 @@ func UpdateDefaultMetric(gateway string, index, metric int) error {
 		return fmt.Errorf("failed to UpdateDefaultMetric: %v, output: %s", err, string(output))
 	}
 
+	return nil
+}
+func SetInterfaceDNS(ifIndex int, servers []string) error {
+	quoted := make([]string, len(servers))
+	for i, s := range servers {
+		quoted[i] = fmt.Sprintf(`"%s"`, s)
+	}
+	cmd := exec.Command("powershell", "-Command",
+		fmt.Sprintf(`Set-DnsClientServerAddress -InterfaceIndex %d -ServerAddresses (%s)`, ifIndex, strings.Join(quoted, ",")))
+	log.Println(cmd.String())
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true, // 关键设置，阻止窗口闪现
+	}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to SetInterfaceDNS: %v, output: %s", err, string(output))
+	}
+	return nil
+}
+func ResetInterfaceDNS(ifIndex int) error {
+	cmd := exec.Command("powershell", "-Command",
+		fmt.Sprintf(`Set-DnsClientServerAddress -InterfaceIndex %d -ResetServerAddresses`, ifIndex))
+	log.Println(cmd.String())
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true, // 关键设置，阻止窗口闪现
+	}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to ResetInterfaceDNS: %v, output: %s", err, string(output))
+	}
 	return nil
 }
 func AddRoute(destination, mask, gateway netip.Addr, metric, ifIndex int) error {
