@@ -38,8 +38,8 @@ func main() {
 	// Create application with options
 	err = wails.Run(&options.App{
 		Title:            "PlayFast",
-		Width:            576,
-		Height:           384,
+		Width:            800,
+		Height:           550,
 		BackgroundColour: &options.RGBA{R: 75, G: 0, B: 130, A: 1},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
