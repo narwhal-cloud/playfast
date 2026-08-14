@@ -11,19 +11,27 @@ import (
 	"playfast/internal/http-client"
 	"time"
 
+	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/include"
-	slog "github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 )
 
-type Proxy struct {
-	Name     string `json:"name"`
-	Method   string `json:"method"`
-	Password string `json:"password"`
+type SSHTunnel struct {
 	Host     string `json:"host"`
 	Port     uint16 `json:"port"`
-	Protocol string `json:"protocol"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+type Proxy struct {
+	Name      string     `json:"name"`
+	Method    string     `json:"method"`
+	Password  string     `json:"password"`
+	Host      string     `json:"host"`
+	Port      uint16     `json:"port"`
+	Protocol  string     `json:"protocol"`
+	SSHTunnel *SSHTunnel `json:"ssh_tunnel,omitempty"`
 }
 
 func Get() []Proxy {
@@ -35,13 +43,15 @@ func Get() []Proxy {
 	_ = json.Unmarshal(all, &data)
 	return data
 }
-func GetOutbound(proxy string) (*option.Outbound, string, error) {
+func GetOutbound(proxy string) (*option.Outbound, *option.Outbound, string, error) {
 	data := Get()
+	var lastErr string
 	for i, p := range data {
 		if p.Name != proxy {
 			continue
 		}
 		var out option.Outbound
+		var sshOut *option.Outbound
 		switch p.Protocol {
 		case "shadowsocks":
 			out = option.Outbound{
@@ -101,24 +111,96 @@ func GetOutbound(proxy string) (*option.Outbound, string, error) {
 		default:
 			continue
 		}
-		registryOut := include.OutboundRegistry()
-		createOutbound, err := registryOut.CreateOutbound(context.Background(), nil, slog.StdLogger(), out.Type, out.Type, out.Options)
+		if p.SSHTunnel != nil {
+			user := p.SSHTunnel.User
+			if user == "" {
+				user = "root"
+			}
+			sshOut = &option.Outbound{
+				Type: constant.TypeSSH,
+				Tag:  "ssh-detour",
+				Options: &option.SSHOutboundOptions{
+					ServerOptions: option.ServerOptions{
+						Server:     p.SSHTunnel.Host,
+						ServerPort: p.SSHTunnel.Port,
+					},
+					User:     user,
+					Password: p.SSHTunnel.Password,
+				},
+			}
+			switch opts := out.Options.(type) {
+			case *option.ShadowsocksOutboundOptions:
+				opts.Detour = "ssh-detour"
+			case *option.VLESSOutboundOptions:
+				opts.Detour = "ssh-detour"
+			case *option.SOCKSOutboundOptions:
+				opts.Detour = "ssh-detour"
+			}
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		ctx = box.Context(ctx, include.InboundRegistry(), include.OutboundRegistry(), include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
+
+		outbounds := make([]option.Outbound, 0, 2)
+		if sshOut != nil {
+			outbounds = append(outbounds, *sshOut)
+		}
+		outbounds = append(outbounds, out)
+		testBoxOptions := option.Options{
+			Outbounds: outbounds,
+		}
+
+		instance, err := box.New(box.Options{
+			Options: testBoxOptions,
+			Context: ctx,
+		})
 		if err != nil {
+			lastErr = fmt.Sprintf("创建测试 Box 失败: %v", err)
+			cancel()
 			continue
 		}
-		client := echo.NewClient("1.1.1.1:80", echo.WithTimeout(3*time.Second), echo.WithDialer(createOutbound.DialContext))
+		err = instance.Start()
+		if err != nil {
+			lastErr = fmt.Sprintf("启动 SSH 隧道/代理失败: %v", err)
+			cancel()
+			continue
+		}
+
+		outboundService, ok := instance.Outbound().Outbound("proxy")
+		if !ok {
+			lastErr = "未找到 proxy Outbound"
+			_ = instance.Close()
+			cancel()
+			continue
+		}
+
+		client := echo.NewClient("1.1.1.1:80", echo.WithTimeout(3*time.Second), echo.WithDialer(outboundService.DialContext))
 		err = client.Connect(context.Background())
 		if err != nil {
+			lastErr = fmt.Sprintf("节点测试连接失败: %v", err)
+			_ = instance.Close()
+			cancel()
 			continue
 		}
 		var ms int64
 		result := client.Test(context.Background(), []byte("GET / HTTP/1.1\r\nHost: 1.1.1.1\r\nAccept: *\r\n\r\n\r\n"))
 		ms = result.Latency.Milliseconds()
 		log.Println(fmt.Sprintf("节点选择:ID:%d 节点:%s 延迟=%dms\n", i, p.Name, ms))
+
+		_ = instance.Close()
+		cancel()
+
 		if ms <= 0 {
-			return nil, "", errors.New("节点超时")
+			return nil, nil, "", errors.New("节点超时")
 		}
-		return &out, p.Host, nil
+		realHost := p.Host
+		if p.SSHTunnel != nil {
+			realHost = p.SSHTunnel.Host
+		}
+		return &out, sshOut, realHost, nil
 	}
-	return nil, "", errors.New("not fount Outbound")
+	if len(lastErr) > 0 {
+		return nil, nil, "", fmt.Errorf("%s", lastErr)
+	}
+	return nil, nil, "", errors.New("not fount Outbound")
 }

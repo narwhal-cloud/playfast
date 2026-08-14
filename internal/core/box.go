@@ -137,7 +137,7 @@ func (b *Box) update() {
 }
 
 func (b *Box) newBox(proxy string) error {
-	proxyOutbound, proxyOutboundHost, err := node.GetOutbound(proxy)
+	proxyOutbound, sshOutbound, proxyOutboundHost, err := node.GetOutbound(proxy)
 	if err != nil {
 		return err
 	}
@@ -147,6 +147,12 @@ func (b *Box) newBox(proxy string) error {
 		return err
 	}
 	b.appends = append(b.appends, fmt.Sprintf("%s/32", proxyOutboundIp))
+	outbounds := make([]option.Outbound, 0, 3)
+	if sshOutbound != nil {
+		outbounds = append(outbounds, *sshOutbound)
+	}
+	outbounds = append(outbounds, *proxyOutbound)
+	outbounds = append(outbounds, option.Outbound{Type: constant.TypeDirect, Tag: "direct"})
 	options := box.Options{
 		Options: option.Options{
 			Log: &option.LogOptions{
@@ -276,9 +282,7 @@ func (b *Box) newBox(proxy string) error {
 				AutoDetectInterface: true,
 				Rules:               []option.Rule{},
 			},
-			Outbounds: []option.Outbound{
-				*proxyOutbound, {Type: constant.TypeDirect, Tag: "direct"},
-			},
+			Outbounds: outbounds,
 			Experimental: &option.ExperimentalOptions{
 				ClashAPI: &option.ClashAPIOptions{
 					ExternalController: "127.0.0.1:54713",
