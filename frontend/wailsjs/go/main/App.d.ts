@@ -5,8 +5,8 @@ export function GetAnnouncement():Promise<string>;
 
 export function Open(arg1:string):Promise<void>;
 
-export function ProxyList():Promise<Array<string>>;
+export function ProxyList(arg1:string):Promise<Array<string>>;
 
-export function Switch(arg1:boolean,arg2:string,arg3:boolean):Promise<string>;
+export function Switch(arg1:string,arg2:boolean,arg3:string,arg4:boolean):Promise<string>;
 
 export function Version():Promise<string>;

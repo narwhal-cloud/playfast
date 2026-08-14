@@ -153,7 +153,7 @@ func (a *App) systemTray() {
 		}
 	}()
 }
-func (a *App) Switch(status bool, proxy string, route bool) string {
+func (a *App) Switch(userUUID string, status bool, proxy string, route bool) string {
 	for i := 0; i < 300; i++ {
 		if a.init.Load() == false {
 			time.Sleep(time.Millisecond * 100)
@@ -174,7 +174,7 @@ func (a *App) Switch(status bool, proxy string, route bool) string {
 				}()
 			}()
 		}
-		if err = a.box.Start(proxy, route); err != nil {
+		if err = a.box.Start(userUUID, proxy, route); err != nil {
 			dialog.Error(a.ctx, "加速失败", err.Error())
 			return err.Error()
 		}
@@ -200,8 +200,8 @@ func (a *App) Version() string {
 func (a *App) Open(path string) {
 	_ = exec.Command(path).Start()
 }
-func (a *App) ProxyList() []string {
-	get := node.Get()
+func (a *App) ProxyList(userUUID string) []string {
+	get := node.Get(userUUID)
 	strings := make([]string, 0)
 	for _, proxy := range get {
 		strings = append(strings, proxy.Name)

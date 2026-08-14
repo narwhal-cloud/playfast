@@ -10,12 +10,12 @@ export function Open(arg1) {
   return window['go']['main']['App']['Open'](arg1);
 }
 
-export function ProxyList() {
-  return window['go']['main']['App']['ProxyList']();
+export function ProxyList(arg1) {
+  return window['go']['main']['App']['ProxyList'](arg1);
 }
 
-export function Switch(arg1, arg2, arg3) {
-  return window['go']['main']['App']['Switch'](arg1, arg2, arg3);
+export function Switch(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['Switch'](arg1, arg2, arg3, arg4);
 }
 
 export function Version() {

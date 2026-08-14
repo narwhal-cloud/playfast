@@ -34,17 +34,23 @@ type Proxy struct {
 	SSHTunnel *SSHTunnel `json:"ssh_tunnel,omitempty"`
 }
 
-func Get() []Proxy {
+func Get(userUUID string) []Proxy {
 	data := make([]Proxy, 0)
-	all, err := http_client.GET(fmt.Sprintf("%s/proxy.json", api.GetApiDomain()))
+	var url string
+	if userUUID == "" {
+		url = fmt.Sprintf("%s/proxy.json", api.GetApiDomain())
+	} else {
+		url = fmt.Sprintf("%s/user/%s/proxy.json", api.GetApiDomain(), userUUID)
+	}
+	all, err := http_client.GET(url)
 	if err != nil {
 		return data
 	}
 	_ = json.Unmarshal(all, &data)
 	return data
 }
-func GetOutbound(proxy string) (*option.Outbound, *option.Outbound, string, error) {
-	data := Get()
+func GetOutbound(userUUID string, proxy string) (*option.Outbound, *option.Outbound, string, error) {
+	data := Get(userUUID)
 	var lastErr string
 	for i, p := range data {
 		if p.Name != proxy {

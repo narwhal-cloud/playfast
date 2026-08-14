@@ -53,6 +53,7 @@ interface TrafficData {
 }
 
 export function App(props: any) {
+    const [userUUID, setUserUUID] = useState<string>(() => localStorage.getItem('playfast_uuid') || '');
     const [status, setStatus] = useState('开始加速');
     const [isLoading, setIsLoading] = useState(false);
     const [getVersion, setVersion] = useState("v1.0.0");
@@ -62,6 +63,29 @@ export function App(props: any) {
     const [isHostMode, setIsHostMode] = useState(false); // 新增主机模式状态
     const [stats, setStats] = useState({download: 0, upload: 0, totalTraffic:0, uptime: 0});
     const timerRef = useRef<number | null>(null);
+
+    // 重新加载服务器列表
+    const loadProxies = async (uuid: string) => {
+        try {
+            const servers = await ProxyList(uuid);
+            setProxyList(servers);
+            if (servers.length > 0) {
+                setRegion(servers[0]);
+            } else {
+                setRegion('');
+            }
+        } catch (error) {
+            console.error("获取服务器列表失败:", error);
+        }
+    };
+
+    // 处理 UUID 变化
+    const handleUUIDChange = (e: any) => {
+        const val = e.target.value;
+        setUserUUID(val);
+        localStorage.setItem('playfast_uuid', val);
+        loadProxies(val);
+    };
     // WebSocket连接引用
     const wsRef = useRef<WebSocket | null>(null);
     // 格式化字节数为人类可读格式
@@ -166,7 +190,7 @@ export function App(props: any) {
     // 启动和停止加速
     function sw() {
         setIsLoading(true); // 点击时将 loading 状态设为 true
-        Switch(status === "开始加速", getRegion, isHostMode).then(
+        Switch(userUUID, status === "开始加速", getRegion, isHostMode).then(
             function (res) {
                 setIsLoading(false);
                 if (res==""){
@@ -184,13 +208,7 @@ export function App(props: any) {
                 setVersion(version);
 
                 // 获取服务器列表
-                const servers = await ProxyList();
-                setProxyList(servers);
-
-                // 设置默认选中第一个服务器
-                if (servers.length > 0) {
-                    setRegion(servers[0]);
-                }
+                await loadProxies(userUUID);
             } catch (error) {
                 console.error("获取初始数据失败:", error);
             }
@@ -274,6 +292,28 @@ export function App(props: any) {
                     
                     {/* 区域选择和加速按钮 */}
                     <div id="Bottom">
+                        <div>
+                            <label htmlFor="user-uuid-input">用户凭证：</label>
+                            <input
+                                id="user-uuid-input"
+                                type="text"
+                                placeholder="请输入用户 UUID"
+                                value={userUUID}
+                                onChange={handleUUIDChange}
+                                disabled={isAccelerated}
+                                style={{
+                                    width: '100%',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(138, 43, 226, 0.4)',
+                                    background: 'rgba(18, 18, 18, 0.6)',
+                                    color: '#fff',
+                                    outline: 'none',
+                                    marginBottom: '8px',
+                                    fontSize: '0.85rem'
+                                }}
+                            />
+                        </div>
                         <div>
                             <label htmlFor="region-select">加速节点：</label>
                             <select id="region-select" value={getRegion} onChange={onChange} disabled={isAccelerated}>

@@ -48,12 +48,12 @@ type Box struct {
 	sync.Mutex
 }
 
-func (b *Box) Start(region string, router bool) error {
+func (b *Box) Start(userUUID string, region string, router bool) error {
 	b.Lock()
 	defer b.Unlock()
 	b.router = router
 	if b.box == nil {
-		err := b.newBox(region)
+		err := b.newBox(userUUID, region)
 		if err != nil {
 			return err
 		}
@@ -136,8 +136,8 @@ func (b *Box) update() {
 	b.Unlock()
 }
 
-func (b *Box) newBox(proxy string) error {
-	proxyOutbound, sshOutbound, proxyOutboundHost, err := node.GetOutbound(proxy)
+func (b *Box) newBox(userUUID string, proxy string) error {
+	proxyOutbound, sshOutbound, proxyOutboundHost, err := node.GetOutbound(userUUID, proxy)
 	if err != nil {
 		return err
 	}
