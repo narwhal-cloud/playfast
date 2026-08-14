@@ -39,6 +39,9 @@ var black []byte
 //go:embed direct-list.json
 var direct []byte
 
+//go:embed proxy-list.json
+var proxyList []byte
+
 type Box struct {
 	box              *box.Box
 	ctx              context.Context
@@ -95,6 +98,7 @@ func New(ctx context.Context) *Box {
 	ctx = box.Context(ctx, include.InboundRegistry(), include.OutboundRegistry(), include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
 	_ = os.WriteFile(filepath.Join(path.Path(), "black-list.json"), black, 0644)
 	_ = os.WriteFile(filepath.Join(path.Path(), "direct-list.json"), direct, 0644)
+	_ = os.WriteFile(filepath.Join(path.Path(), "proxy-list.json"), proxyList, 0644)
 	_ = os.WriteFile(filepath.Join(path.Path(), "geoip-cn.srs"), geoip, 0644)
 	_ = os.WriteFile(filepath.Join(path.Path(), "geosite-cn.srs"), geosite, 0644)
 	b := Box{
@@ -119,6 +123,13 @@ func (b *Box) update() {
 	}
 	b.Lock()
 	_ = os.WriteFile(filepath.Join(path.Path(), "direct-list.json"), data, 0644)
+	b.Unlock()
+	data, err = httpclient.GET(fmt.Sprintf("%s/proxy-list.json", api.GetApiDomain()))
+	if err != nil {
+		data = proxyList
+	}
+	b.Lock()
+	_ = os.WriteFile(filepath.Join(path.Path(), "proxy-list.json"), data, 0644)
 	b.Unlock()
 	data, err = httpclient.GET("https://raw.githubusercontent.com/lyc8503/sing-box-rules/refs/heads/rule-set-geoip/geoip-cn.srs")
 	if err != nil {
@@ -278,6 +289,12 @@ func (b *Box) newBox(userUUID string, proxy string) error {
 						Format:       constant.RuleSetFormatSource,
 						LocalOptions: option.LocalRuleSet{Path: filepath.Join(path.Path(), "direct-list.json")},
 					},
+					{
+						Type:         constant.RuleSetTypeLocal,
+						Tag:          "proxy-list",
+						Format:       constant.RuleSetFormatSource,
+						LocalOptions: option.LocalRuleSet{Path: filepath.Join(path.Path(), "proxy-list.json")},
+					},
 				},
 				AutoDetectInterface: true,
 				Rules:               []option.Rule{},
@@ -368,6 +385,20 @@ func (b *Box) newBox(userUUID string, proxy string) error {
 				},
 			},
 		}, //dns劫持
+		{
+			Type: constant.RuleTypeDefault,
+			DefaultOptions: option.DefaultRule{
+				RawDefaultRule: option.RawDefaultRule{
+					RuleSet: []string{"proxy-list"},
+				},
+				RuleAction: option.RuleAction{
+					Action: constant.RuleActionTypeRoute,
+					RouteOptions: option.RouteActionOptions{
+						Outbound: "proxy",
+					},
+				},
+			},
+		}, //强制代理白名单，避免被 geoip-cn 误判直连
 		{
 			Type: constant.RuleTypeDefault,
 			DefaultOptions: option.DefaultRule{
